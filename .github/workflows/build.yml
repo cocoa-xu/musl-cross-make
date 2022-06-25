@@ -1,0 +1,43 @@
+name: linux-musl-crosscompile-toolchain
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: self-hosted
+    env:
+      BINUTILS_VER: "2.33.1"
+      GCC_VER: "11.2.0"
+      LINUX_VER: "5.8.5"
+    strategy:
+      fail-fast: false
+      matrix:
+        toolchain_name: ["aarch64-linux-musl", "riscv64-linux-musl"]
+
+    steps:
+      - uses: actions/checkout@v2
+
+      - name: Install system dependecies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential automake autoconf pkg-config bc m4 unzip zip curl git libssl-dev gzip ca-certificates
+
+      - name: Download x86_64-linux-musl
+        run: |
+          wget https://musl.cc/x86_64-linux-musl-native.tgz
+          tar xf x86_64-linux-musl-native.tgz 
+      
+      - name: Build crosscompile toolchain
+        run: |
+          export PATH="$(pwd)/x86_64-linux-musl-native/bin:${PATH}"
+          make TARGET=${{ matrix.toolchain_name }} BINUTILS_VER=${BINUTILS_VER} GCC_VER=${GCC_VER} LINUX_VER=${LINUX_VER} OUTPUT="$(pwd)/${{ matrix.toolchain_name }}" -j$(nproc)
+          make TARGET=${{ matrix.toolchain_name }} BINUTILS_VER=${BINUTILS_VER} GCC_VER=${GCC_VER} LINUX_VER=${LINUX_VER} OUTPUT="$(pwd)/${{ matrix.toolchain_name }}" install
+          zip -r -9 -y "${{ matrix.toolchain_name }}.zip" "${{ matrix.toolchain_name }}"
+
+      - uses: softprops/action-gh-release@v1
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          files: "${{ matrix.toolchain_name }}.zip"
